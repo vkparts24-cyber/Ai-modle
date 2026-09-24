@@ -23,6 +23,9 @@
 </div>
 
 <script>
+  // Conversation History Maintain Karne Ke Liye
+  let conversationHistory = [];
+
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   
   if (!SpeechRecognition) {
@@ -42,23 +45,41 @@
       document.getElementById("status").innerText = `Aapne kaha: "${userText}"`;
       document.getElementById("replyText").innerText = "Soch raha hu...";
 
+      // Conversation Array Update Karein
+      conversationHistory.push({
+        role: "user",
+        parts: [{ text: userText }]
+      });
+
       try {
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: userText })
+          body: JSON.stringify({ history: conversationHistory })
         });
 
         const data = await response.json();
-        if (data.text) {
-          document.getElementById("replyText").innerText = data.text;
+
+        if (data.reply) {
+          document.getElementById("replyText").innerText = data.reply;
+
+          // Model Reply Ko History Me Save Karein
+          conversationHistory.push({
+            role: "model",
+            parts: [{ text: data.reply }]
+          });
           
-          // Audio play karein
-          const audio = new Audio(data.audio);
-          audio.play();
-          document.getElementById("status").innerText = "Jawab suniye...";
+          // Base64 Audio Playback Fix
+          if (data.audio) {
+            const audioSource = "data:audio/mp3;base64," + data.audio;
+            const audio = new Audio(audioSource);
+            audio.play();
+            document.getElementById("status").innerText = "Jawab suniye...";
+          } else {
+            document.getElementById("status").innerText = "Text reply mil gaya.";
+          }
         } else {
-          document.getElementById("status").innerText = "Kucch gadbad hui!";
+          document.getElementById("status").innerText = data.error || "Kuchh gadbad hui!";
         }
       } catch (err) {
         document.getElementById("status").innerText = "Error aagaya connection me.";
