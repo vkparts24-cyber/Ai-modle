@@ -2,10 +2,9 @@
 // 1. CONFIGURATION & ENVIRONMENT KEYS SETUP
 // =============================================================
 
-const GEMINI_API_KEYS = [
-  process.env.GEMINI_KEY_1 || "AQ.Ab8RN6IWwGBqeQEqNnN-TW5LOpR1bU3S9VrnZA_ksZf-XkS7MQ",
-  process.env.GEMINI_KEY_2 || "AQ.Ab8RN6Lo2oTZvomNE7zRrA3w5kIUfw5VL4sxyzYxkQcl5hSmVA",
-  process.env.GEMINI_KEY_3 || "AQ.Ab8RN6KF9mD7yIaIuoD80NbJUCWpnRqm0oKLCArKP2jksgt__Q"
+// Groq API Keys Array (Vercel Env variables ya fallback direct keys)
+const GROQ_API_KEYS = [
+  process.env.GROQ_API_KEY_1 || "gsk_YOUR_GROQ_API_KEY_HERE"
 ];
 
 const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || "sk-fish-IshdwBNzlaxOSM1rlkmzyXbFUOAulC5bDk-tbKBJVZY";
@@ -28,30 +27,41 @@ Strict Rules for Personality & Behavior:
 `;
 
 // =============================================================
-// 3. GEMINI API CALL WITH 3-KEY ROTATION LOOP
+// 3. GROQ API CALL FUNCTION (LLAMA-3.3 MODEL)
 // =============================================================
-async function fetchGeminiResponse(conversationHistory) {
+async function fetchGroqResponse(conversationHistory) {
   let success = false;
   let responseData = null;
   let lastError = null;
 
-  const contents = [
-    { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-    { role: "model", parts: [{ text: "Heyyy! Main Riya hoon. Batao aaj kya chal raha hai?" }] },
-    ...conversationHistory
+  // Format history for Groq (OpenAI-compatible format)
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...conversationHistory.map(item => ({
+      role: item.role === "model" ? "assistant" : item.role,
+      content: item.parts ? item.parts[0].text : item.content
+    }))
   ];
 
-  for (let i = 0; i < GEMINI_API_KEYS.length; i++) {
-    const activeKey = GEMINI_API_KEYS[i];
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`;
+  for (let i = 0; i < GROQ_API_KEYS.length; i++) {
+    const activeKey = GROQ_API_KEYS[i];
+    const endpoint = "https://api.groq.com/openai/v1/chat/completions";
 
     try {
-      console.log(`[REQUEST] Gemini Key #${i + 1} se request bhej rahe hain...`);
+      console.log(`[REQUEST] Groq Key #${i + 1} se request bhej rahe hain...`);
       
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: contents })
+        headers: { 
+          "Authorization": `Bearer ${activeKey}`,
+          "Content-Type": "application/json" 
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 150
+        })
       });
 
       if (!response.ok) {
@@ -60,23 +70,23 @@ async function fetchGeminiResponse(conversationHistory) {
 
       const data = await response.json();
       
-      if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
-        responseData = data.candidates[0].content.parts[0].text;
+      if (data.choices && data.choices[0]?.message?.content) {
+        responseData = data.choices[0].message.content;
         success = true;
-        console.log(`[SUCCESS] Key #${i + 1} se response mil gaya!`);
+        console.log(`[SUCCESS] Groq Key #${i + 1} se response mil gaya!`);
         break;
       } else {
-        throw new Error("Invalid response JSON format from Gemini API");
+        throw new Error("Invalid response JSON format from Groq API");
       }
 
     } catch (error) {
-      console.warn(`[API WARN] Key #${i + 1} fail hui: ${error.message}`);
+      console.warn(`[API WARN] Groq Key #${i + 1} fail hui: ${error.message}`);
       lastError = error;
     }
   }
 
   if (!success) {
-    throw new Error(`Sabhi Gemini API Keys fail ho gayi hain. Last error: ${lastError?.message}`);
+    throw new Error(`Sabhi Groq API Keys fail ho gayi hain. Last error: ${lastError?.message}`);
   }
 
   return responseData;
@@ -139,11 +149,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Valid history array is required in request body.' });
     }
 
-    const geminiReply = await fetchGeminiResponse(history);
+    // 1. Groq Text Response
+    const groqReply = await fetchGroqResponse(history);
 
+    // 2. Fish Audio Voice Generation
     let audioBase64 = null;
     try {
-      const cleanTextForAudio = geminiReply.replace(/PLAY_SONG:.*$/g, "").trim();
+      const cleanTextForAudio = groqReply.replace(/PLAY_SONG:.*$/g, "").trim();
       if (cleanTextForAudio) {
         audioBase64 = await generateFishAudio(cleanTextForAudio);
       }
@@ -152,7 +164,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({ 
-      reply: geminiReply,
+      reply: groqReply,
       audio: audioBase64
     });
 
