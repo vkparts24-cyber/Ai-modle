@@ -4,7 +4,7 @@
 
 // Aapki Teeno Gemini API Keys (AQ... format support ke sath)
 const GEMINI_API_KEYS = [
-  "",
+  "AQ.Ab8RN6IWwGBqeQEqNnN-TW5LOpR1bU3S9VrnZA_ksZf-XkS7MQ",
   "",
   ""
 ];
