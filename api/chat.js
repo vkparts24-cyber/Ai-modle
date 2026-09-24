@@ -10,7 +10,7 @@ const GEMINI_API_KEYS = [
 ];
 
 // Fish Audio Setup (Agar use kar rahe hain)
-const FISH_AUDIO_API_KEY = "";
+const FISH_AUDIO_API_KEY = "sk-fish-IshdwBNzlaxOSM1rlkmzyXbFUOAulC5bDk-tbKBJVZY";
 const FISH_MODEL_ID = "";
 
 // Key Tracking Index
