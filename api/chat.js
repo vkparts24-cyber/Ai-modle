@@ -4,7 +4,7 @@
 
 // Groq API Keys Array (Vercel Env variables ya fallback direct keys)
 const GROQ_API_KEYS = [
-  process.env.GROQ_API_KEY_1 || "gsk_YOUR_GROQ_API_KEY_HERE"
+  process.env.GROQ_API_KEY_1 || "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"
 ];
 
 const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || "sk-fish-IshdwBNzlaxOSM1rlkmzyXbFUOAulC5bDk-tbKBJVZY";
