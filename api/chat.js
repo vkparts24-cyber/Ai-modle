@@ -1,32 +1,16 @@
 // =============================================================
-// 1. CONFIGURATION & API KEYS SETUP
+// 1. CONFIGURATION & ENVIRONMENT KEYS SETUP
 // =============================================================
 
-// Aapki Teeno Gemini API Keys (AQ... format support ke sath)
+// Environment variables se keys uthaayein ya fallback array use karein
 const GEMINI_API_KEYS = [
-  "AQ.Ab8RN6IWwGBqeQEqNnN-TW5LOpR1bU3S9VrnZA_ksZf-XkS7MQ",
-  "AQ.Ab8RN6Lo2oTZvomNE7zRrA3w5kIUfw5VL4sxyzYxkQcl5hSmVA",
-  "AQ.Ab8RN6KF9mD7yIaIuoD80NbJUCWpnRqm0oKLCArKP2jksgt__Q"
+  process.env.GEMINI_KEY_1 || "AQ.Ab8RN6IWwGBqeQEqNnN-TW5LOpR1bU3S9VrnZA_ksZf-XkS7MQ",
+  process.env.GEMINI_KEY_2 || "AQ.Ab8RN6Lo2oTZvomNE7zRrA3w5kIUfw5VL4sxyzYxkQcl5hSmVA",
+  process.env.GEMINI_KEY_3 || "AQ.Ab8RN6KF9mD7yIaIuoD80NbJUCWpnRqm0oKLCArKP2jksgt__Q"
 ];
 
-// Fish Audio Setup (Agar use kar rahe hain)
-const FISH_AUDIO_API_KEY = "sk-fish-IshdwBNzlaxOSM1rlkmzyXbFUOAulC5bDk-tbKBJVZY";
-const FISH_MODEL_ID = "64e121555e134819989048e5415846d6";
-
-// Key Tracking Index
-let currentKeyIndex = 0;
-
-// Helper Function: Active Key Haasil Karne Ke Liye
-function getActiveApiKey() {
-  return GEMINI_API_KEYS[currentKeyIndex];
-}
-
-// Helper Function: Key Rotate Karne Ke Liye
-function rotateApiKey() {
-  const previousKey = currentKeyIndex;
-  currentKeyIndex = (currentKeyIndex + 1) % GEMINI_API_KEYS.length;
-  console.warn(`[API ROTATION] Key #${previousKey + 1} limit hit/error! Switched to Key #${currentKeyIndex + 1}`);
-}
+const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || "sk-fish-IshdwBNzlaxOSM1rlkmzyXbFUOAulC5bDk-tbKBJVZY";
+const FISH_MODEL_ID = process.env.FISH_MODEL_ID || "64e121555e134819989048e5415846d6";
 
 // =============================================================
 // 2. STRICT GIRLY & WITTY SYSTEM PROMPT
@@ -45,27 +29,27 @@ Strict Rules for Personality & Behavior:
 `;
 
 // =============================================================
-// 3. GEMINI API CALL WITH 3-KEY ROTATION LOOP
+// 3. GEMINI API CALL WITH 3-KEY ROTATION LOOP (ROBUST FIX)
 // =============================================================
 async function fetchGeminiResponse(conversationHistory) {
-  let attempts = 0;
   let success = false;
   let responseData = null;
+  let lastError = null;
 
-  // Formatting conversation for Gemini REST API v1beta
+  // Format history for Gemini API
   const contents = [
     { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
     { role: "model", parts: [{ text: "Heyyy! Main Riya hoon. Batao aaj kya chal raha hai?" }] },
     ...conversationHistory
   ];
 
-  // Rotation Loop: Jab tak koi key kaam na kare ya teeno keys try na ho jayein
-  while (attempts < GEMINI_API_KEYS.length && !success) {
-    const activeKey = getActiveApiKey();
+  // Independent Key Loop for Thread Safety
+  for (let i = 0; i < GEMINI_API_KEYS.length; i++) {
+    const activeKey = GEMINI_API_KEYS[i];
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`;
 
     try {
-      console.log(`[REQUEST] Gemini Key #${currentKeyIndex + 1} se request bhej rahe hain...`);
+      console.log(`[REQUEST] Gemini Key #${i + 1} se request bhej rahe hain...`);
       
       const response = await fetch(endpoint, {
         method: "POST",
@@ -74,38 +58,37 @@ async function fetchGeminiResponse(conversationHistory) {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP Error Status: ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
       
-      if (data.candidates && data.candidates[0].content.parts[0].text) {
+      if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
         responseData = data.candidates[0].content.parts[0].text;
         success = true;
-        console.log(`[SUCCESS] Key #${currentKeyIndex + 1} se reply mil gaya!`);
+        console.log(`[SUCCESS] Key #${i + 1} se response mil gaya!`);
+        break; // Loop end on success
       } else {
-        throw new Error("Invalid response format from Gemini");
+        throw new Error("Invalid response JSON format from Gemini API");
       }
 
     } catch (error) {
-      console.error(`[ERROR] Key #${currentKeyIndex + 1} fail hui:`, error.message);
-      attempts++;
-      rotateApiKey(); // Agli key par switch karein
+      console.warn(`[API WARN] Key #${i + 1} fail hui: ${error.message}`);
+      lastError = error;
     }
   }
 
   if (!success) {
-    throw new Error("Teeno Gemini API Keys limit exceed ho gayi hain ya kaam nahi kar rahi hain.");
+    throw new Error(`Sabhi Gemini API Keys fail ho gayi hain. Last error: ${lastError?.message}`);
   }
 
   return responseData;
 }
 
 // =============================================================
-// 4. FISH AUDIO INTEGRATION (Voice Model)
+// 4. FISH AUDIO TTS INTEGRATION (Base64 Binary Output)
 // =============================================================
 async function generateFishAudio(text) {
-  // Agar Fish Audio setup nahi kiya hai to null return karein
   if (!FISH_AUDIO_API_KEY || FISH_AUDIO_API_KEY.includes("YOUR_FISH_AUDIO")) {
     return null;
   }
@@ -125,25 +108,28 @@ async function generateFishAudio(text) {
       })
     });
 
-    if (!response.ok) throw new Error("Fish Audio TTS failed");
+    if (!response.ok) throw new Error(`Fish Audio API Failed: ${response.status}`);
 
-    const audioBuffer = await response.arrayBuffer();
-    return audioBuffer;
+    const buffer = await response.arrayBuffer();
+    // Convert audio buffer to Base64 String for easy JSON transfer
+    return Buffer.from(buffer).toString("base64");
+
   } catch (err) {
     console.error("[FISH AUDIO ERROR]", err.message);
-    return null;
+    return null; // Fail gracefully if TTS errors out
   }
 }
+
 // =============================================================
-// 5. VERCEL SERVERLESS HANDLER (ISKO AAKHIR ME CHAHIYE)
+// 5. VERCEL SERVERLESS HANDLER
 // =============================================================
 export default async function handler(req, res) {
-  // CORS Headers (Browser blocking fix karne ke liye)
+  // Global CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Preflight Request Options Pass Karein
+  // Handle Preflight Request
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -155,16 +141,29 @@ export default async function handler(req, res) {
   try {
     const { history } = req.body;
 
-    if (!history) {
-      return res.status(400).json({ error: 'History / Message required in request body.' });
+    if (!history || !Array.isArray(history)) {
+      return res.status(400).json({ error: 'Valid history array is required in request body.' });
     }
 
-    // 1. Gemini Response Fetch Karein (3-Key Loop)
+    // 1. Gemini Text Response
     const geminiReply = await fetchGeminiResponse(history);
 
-    // 2. Output Return Karein
+    // 2. Fish Audio Voice Generation (Optional - Auto-fallback if fails)
+    let audioBase64 = null;
+    try {
+      // PLAY_SONG tag ko TTS bolne se rokein taaki aawaaz natural lage
+      const cleanTextForAudio = geminiReply.replace(/PLAY_SONG:.*$/g, "").trim();
+      if (cleanTextForAudio) {
+        audioBase64 = await generateFishAudio(cleanTextForAudio);
+      }
+    } catch (e) {
+      console.warn("Audio generation skipped due to error.");
+    }
+
+    // 3. Complete Response Return Karein
     return res.status(200).json({ 
-      reply: geminiReply 
+      reply: geminiReply,
+      audio: audioBase64 // Base64 Audio data (ya null)
     });
 
   } catch (error) {
