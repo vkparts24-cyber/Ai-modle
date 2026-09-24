@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // DIRECT API KEYS & CONFIGURATION
 // -------------------------------------------------------------
 const GEMINI_API_KEYS = [
-  "YOUR_GEMINI_API_KEY_HERE" // Yahan apni Gemini API Key daalein
+  "AQ.Ab8RN6LPErgH1uZtAPsy9ej7oDKXIG42uQEROMqvTpNaHLNzpQ" // Yahan apni Gemini API Key daalein
 ];
 
 const FISH_AUDIO_API_KEY = "sk-fish-MPYmavn6aQEufgpg5QnNQPJ_ESLSqt6NP0pyn0Ihfwk"; // Yahan Fish Audio API Key daalein
