@@ -1,9 +1,6 @@
 {
-  "name": "voice-ai-assistant",
+  "name": "voice-assistant-backend",
   "version": "1.0.0",
-  "main": "api/chat.js",
-  "dependencies": {
-    "@google/generative-ai": "^0.21.0"
-  }
+  "type": "module",
+  "dependencies": {}
 }
-
