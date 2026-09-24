@@ -1,94 +1,140 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 1. Multiple Gemini API Keys Rotation Setup
-const GEMINI_KEYS = [
-  process.env.GEMINI_API_KEY_1,
-  process.env.GEMINI_API_KEY_2,
-  process.env.GEMINI_API_KEY_3
+// -------------------------------------------------------------
+// DIRECT API KEYS & CONFIGURATION
+// -------------------------------------------------------------
+const GEMINI_API_KEYS = [
+  "YOUR_GEMINI_API_KEY_HERE" // Yahan apni Gemini API Key daalein
 ];
 
-let keyIndex = 0;
+const FISH_AUDIO_API_KEY = "YOUR_FISH_AUDIO_API_KEY_HERE"; // Yahan Fish Audio API Key daalein
+const FISH_MODEL_ID = "YOUR_FISH_MODEL_ID_HERE";             // Yahan Fish Audio Model ID daalein
 
-function getGeminiClient() {
-  const apiKey = GEMINI_KEYS[keyIndex];
-  keyIndex = (keyIndex + 1) % GEMINI_KEYS.length;
-  return new GoogleGenerativeAI(apiKey);
-}
+// System Instructions for Assistant Personality
+const SYSTEM_INSTRUCTION = `
+Tum ek helpful, fast, aur smart Voice AI Assistant ho. 
+Hinglish me chote, natural, aur aasaan jawab do jaise dost baat karte hain. 
+Kabhi bhi lambi formatting, markdown bullets, ya taare (asterisks *) ka use mat karo kyunki jawab ko bol kar sunana hai.
+`;
 
 export default async function handler(req, res) {
-  // CORS Headers set karein taaki app/web request block na ho
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // CORS Headers for Frontend Access
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { message } = req.body;
+    const { message, conversationHistory = [] } = req.body;
+
     if (!message) {
-      return res.status(400).json({ error: "Message is required" });
+      return res.status(400).json({ error: 'Message field is required' });
     }
 
-    // A. GEMINI AI RESPONSE GENERATION (With Fallback Rotation)
+    // -------------------------------------------------------------
+    // 1. GEMINI RESPONSE GENERATION
+    // -------------------------------------------------------------
     let aiResponseText = "";
-    let geminiSuccess = false;
+    let geminiError = null;
 
-    for (let i = 0; i < GEMINI_KEYS.length; i++) {
+    // Cycle through API Keys for Fallback
+    for (const apiKey of GEMINI_API_KEYS) {
+      if (!apiKey || apiKey.includes("YOUR_GEMINI_API_KEY")) continue;
+
       try {
-        const ai = getGeminiClient();
-        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-        
-        const systemPrompt = `Aap ek pyaari aur helpful voice assistant hain. User ke sawaal ka bilkul chhota aur natural 1-2 line me Hinglish me jawab do. User Input: ${message}`;
-        const result = await model.generateContent(systemPrompt);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: "gemini-2.5-flash",
+          systemInstruction: SYSTEM_INSTRUCTION
+        });
+
+        // Format history for Gemini
+        const formattedHistory = conversationHistory.map(item => ({
+          role: item.role === 'user' ? 'user' : 'model',
+          parts: [{ text: item.content }]
+        }));
+
+        const chat = model.startChat({ history: formattedHistory });
+        const result = await chat.sendMessage(message);
         aiResponseText = result.response.text();
-        geminiSuccess = true;
-        break;
+
+        // Asterisk/Markdown clean up for natural audio output
+        aiResponseText = aiResponseText.replace(/\*/g, '').trim();
+
+        if (aiResponseText) break; // Successfully got response
       } catch (err) {
-        console.log(`Gemini Key ${i + 1} failed, trying next key...`);
+        console.error("Gemini API Error with current key:", err.message);
+        geminiError = err;
       }
     }
 
-    if (!geminiSuccess) {
-      aiResponseText = "Maaf karna, abhi mera connection thoda slow hai. Thodi der me baat karte hain.";
+    if (!aiResponseText) {
+      throw new Error(geminiError ? geminiError.message : "All Gemini API keys failed or missing.");
     }
 
-    // B. FISH AUDIO API - CLONED VOICE GENERATION
-    const fishAudioResponse = await fetch("https://api.fish.audio/v1/tts", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.FISH_AUDIO_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        text: aiResponseText,
-        reference_id: process.env.FISH_MODEL_ID, // Aapka Model ID
-        format: "mp3",
-        latency: "normal"
-      })
-    });
+    // -------------------------------------------------------------
+    // 2. FISH AUDIO TTS GENERATION
+    // -------------------------------------------------------------
+    let audioBase64 = null;
 
-    if (!fishAudioResponse.ok) {
-      throw new Error(`Fish Audio API error: ${fishAudioResponse.statusText}`);
+    if (
+      FISH_AUDIO_API_KEY && 
+      FISH_MODEL_ID && 
+      !FISH_AUDIO_API_KEY.includes("YOUR_FISH_AUDIO")
+    ) {
+      try {
+        const fishResponse = await fetch("https://api.fish.audio/v1/tts", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${FISH_AUDIO_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            text: aiResponseText,
+            reference_id: FISH_MODEL_ID,
+            format: "mp3",
+            latency: "normal"
+          })
+        });
+
+        if (fishResponse.ok) {
+          const audioBuffer = await fishResponse.arrayBuffer();
+          audioBase64 = Buffer.from(audioBuffer).toString('base64');
+        } else {
+          const errorText = await fishResponse.text();
+          console.error("Fish Audio API Error:", errorText);
+        }
+      } catch (audioErr) {
+        console.error("Fish Audio Fetch Exception:", audioErr.message);
+      }
     }
 
-    // Audio stream ko base64 format me convert karke app ko bhejna
-    const audioArrayBuffer = await fishAudioResponse.arrayBuffer();
-    const audioBase64 = Buffer.from(audioArrayBuffer).toString("base64");
-
+    // -------------------------------------------------------------
+    // 3. FINAL RESPONSE
+    // -------------------------------------------------------------
     return res.status(200).json({
       text: aiResponseText,
-      audio: `data:audio/mp3;base64,${audioBase64}`
+      audio: audioBase64 // Base64 Audio string (or null if TTS failed)
     });
 
   } catch (error) {
-    console.error("Server Error:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    console.error("Server API Handler Error:", error);
+    return res.status(500).json({ 
+      error: "Kuch gadbad hui backend processing me.",
+      details: error.message 
+    });
   }
 }
 
