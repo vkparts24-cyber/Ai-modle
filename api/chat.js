@@ -134,9 +134,43 @@ async function generateFishAudio(text) {
     return null;
   }
 }
+// =============================================================
+// 5. VERCEL SERVERLESS HANDLER (ISKO AAKHIR ME CHAHIYE)
+// =============================================================
+export default async function handler(req, res) {
+  // CORS Headers (Browser blocking fix karne ke liye)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-// Exporting logic for serverless / backend routes
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { fetchGeminiResponse, generateFishAudio };
+  // Preflight Request Options Pass Karein
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+  }
+
+  try {
+    const { history } = req.body;
+
+    if (!history) {
+      return res.status(400).json({ error: 'History / Message required in request body.' });
+    }
+
+    // 1. Gemini Response Fetch Karein (3-Key Loop)
+    const geminiReply = await fetchGeminiResponse(history);
+
+    // 2. Output Return Karein
+    return res.status(200).json({ 
+      reply: geminiReply 
+    });
+
+  } catch (error) {
+    console.error("[HANDLER ERROR]", error.message);
+    return res.status(500).json({ 
+      error: error.message || "Internal Server Error" 
+    });
+  }
 }
-
