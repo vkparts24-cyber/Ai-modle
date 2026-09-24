@@ -2,7 +2,6 @@
 // 1. CONFIGURATION & ENVIRONMENT KEYS SETUP
 // =============================================================
 
-// Environment variables se keys uthaayein ya fallback array use karein
 const GEMINI_API_KEYS = [
   process.env.GEMINI_KEY_1 || "AQ.Ab8RN6IWwGBqeQEqNnN-TW5LOpR1bU3S9VrnZA_ksZf-XkS7MQ",
   process.env.GEMINI_KEY_2 || "AQ.Ab8RN6Lo2oTZvomNE7zRrA3w5kIUfw5VL4sxyzYxkQcl5hSmVA",
@@ -29,21 +28,19 @@ Strict Rules for Personality & Behavior:
 `;
 
 // =============================================================
-// 3. GEMINI API CALL WITH 3-KEY ROTATION LOOP (ROBUST FIX)
+// 3. GEMINI API CALL WITH 3-KEY ROTATION LOOP
 // =============================================================
 async function fetchGeminiResponse(conversationHistory) {
   let success = false;
   let responseData = null;
   let lastError = null;
 
-  // Format history for Gemini API
   const contents = [
     { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
     { role: "model", parts: [{ text: "Heyyy! Main Riya hoon. Batao aaj kya chal raha hai?" }] },
     ...conversationHistory
   ];
 
-  // Independent Key Loop for Thread Safety
   for (let i = 0; i < GEMINI_API_KEYS.length; i++) {
     const activeKey = GEMINI_API_KEYS[i];
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`;
@@ -67,7 +64,7 @@ async function fetchGeminiResponse(conversationHistory) {
         responseData = data.candidates[0].content.parts[0].text;
         success = true;
         console.log(`[SUCCESS] Key #${i + 1} se response mil gaya!`);
-        break; // Loop end on success
+        break;
       } else {
         throw new Error("Invalid response JSON format from Gemini API");
       }
@@ -86,7 +83,7 @@ async function fetchGeminiResponse(conversationHistory) {
 }
 
 // =============================================================
-// 4. FISH AUDIO TTS INTEGRATION (Base64 Binary Output)
+// 4. FISH AUDIO TTS INTEGRATION
 // =============================================================
 async function generateFishAudio(text) {
   if (!FISH_AUDIO_API_KEY || FISH_AUDIO_API_KEY.includes("YOUR_FISH_AUDIO")) {
@@ -111,12 +108,11 @@ async function generateFishAudio(text) {
     if (!response.ok) throw new Error(`Fish Audio API Failed: ${response.status}`);
 
     const buffer = await response.arrayBuffer();
-    // Convert audio buffer to Base64 String for easy JSON transfer
     return Buffer.from(buffer).toString("base64");
 
   } catch (err) {
     console.error("[FISH AUDIO ERROR]", err.message);
-    return null; // Fail gracefully if TTS errors out
+    return null;
   }
 }
 
@@ -124,12 +120,10 @@ async function generateFishAudio(text) {
 // 5. VERCEL SERVERLESS HANDLER
 // =============================================================
 export default async function handler(req, res) {
-  // Global CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle Preflight Request
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -145,13 +139,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Valid history array is required in request body.' });
     }
 
-    // 1. Gemini Text Response
     const geminiReply = await fetchGeminiResponse(history);
 
-    // 2. Fish Audio Voice Generation (Optional - Auto-fallback if fails)
     let audioBase64 = null;
     try {
-      // PLAY_SONG tag ko TTS bolne se rokein taaki aawaaz natural lage
       const cleanTextForAudio = geminiReply.replace(/PLAY_SONG:.*$/g, "").trim();
       if (cleanTextForAudio) {
         audioBase64 = await generateFishAudio(cleanTextForAudio);
@@ -160,10 +151,9 @@ export default async function handler(req, res) {
       console.warn("Audio generation skipped due to error.");
     }
 
-    // 3. Complete Response Return Karein
     return res.status(200).json({ 
       reply: geminiReply,
-      audio: audioBase64 // Base64 Audio data (ya null)
+      audio: audioBase64
     });
 
   } catch (error) {
