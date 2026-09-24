@@ -7,7 +7,7 @@ const GEMINI_API_KEYS = [
   "YOUR_GEMINI_API_KEY_HERE" // Yahan apni Gemini API Key daalein
 ];
 
-const FISH_AUDIO_API_KEY = "YOUR_FISH_AUDIO_API_KEY_HERE"; // Yahan Fish Audio API Key daalein
+const FISH_AUDIO_API_KEY = "sk-fish-MPYmavn6aQEufgpg5QnNQPJ_ESLSqt6NP0pyn0Ihfwk"; // Yahan Fish Audio API Key daalein
 const FISH_MODEL_ID = "YOUR_FISH_MODEL_ID_HERE";             // Yahan Fish Audio Model ID daalein
 
 // System Instructions for Assistant Personality
